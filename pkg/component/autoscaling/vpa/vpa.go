@@ -17,6 +17,7 @@ import (
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	vpaautoscalingv1 "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	"k8s.io/utils/ptr"
@@ -30,6 +31,7 @@ import (
 	"github.com/gardener/gardener/pkg/component/observability/monitoring/prometheus/seed"
 	"github.com/gardener/gardener/pkg/component/observability/monitoring/prometheus/shoot"
 	monitoringutils "github.com/gardener/gardener/pkg/component/observability/monitoring/utils"
+	"github.com/gardener/gardener/pkg/controllerutils"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
 	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
@@ -40,8 +42,11 @@ import (
 
 const (
 	// ManagedResourceControlName is the name of the vpa managed resource for seeds.
-	ManagedResourceControlName = "vpa"
-	shootManagedResourceName   = "shoot-core-" + ManagedResourceControlName
+	ManagedResourceControlName               = "vpa"
+	shootManagedResourceName                 = "shoot-core-" + ManagedResourceControlName
+	recommendationQualityRuleName            = "vpa-recommendation-quality"
+	recommendationDeviationDuration  int     = 30
+	recommendationDeviationTolerance float64 = 0.2
 )
 
 // Interface contains functions for a VPA deployer.
@@ -167,6 +172,9 @@ func (v *vpa) Deploy(ctx context.Context) error {
 			return fmt.Errorf("failed to create CRDDeployer: %w", err)
 		}
 		if err := crdDeployer.Deploy(ctx); err != nil {
+			return err
+		}
+		if err := v.reconcilePrometheusRule(ctx, v.emptyPrometheusRule()); err != nil {
 			return err
 		}
 	}
@@ -333,6 +341,40 @@ func (v *vpa) getPrometheusLabel() string {
 		return seed.Label
 	}
 	return shoot.Label
+}
+
+func (v *vpa) emptyPrometheusRule() *monitoringv1.PrometheusRule {
+	return &monitoringv1.PrometheusRule{ObjectMeta: monitoringutils.ConfigObjectMeta(recommendationQualityRuleName, v.namespace, v.getPrometheusLabel())}
+}
+
+func (v *vpa) reconcilePrometheusRule(ctx context.Context, prometheusRule *monitoringv1.PrometheusRule) error {
+	_, err := controllerutils.GetAndCreateOrMergePatch(ctx, v.client, prometheusRule, func() error {
+		prometheusRule.Spec = monitoringv1.PrometheusRuleSpec{
+			Groups: []monitoringv1.RuleGroup{{
+				Name: "shoot-vpa-recommendation-quality.rules",
+				Rules: []monitoringv1.Rule{
+					{
+						Record: "kube_apiserver_over_recommendation",
+						Expr:   intstr.FromString(fmt.Sprintf(`sum by (pod,namespace) (rate(container_cpu_usage_seconds_total{namespace="shoot-control-plane", pod=~"(?i:Deployment-)?kube-apiserver-(.+)", container="kube-apiserver"}[5m])) > bool on(namespace) group_left kube_customresource_verticalpodautoscaler_status_recommendation_containerrecommendations_target_cpu{namespace=~".+", target_kind=~"Deployment", target_name=~"kube-apiserver", container=~"kube-apiserver|\\*"} * (1 + %f)`, recommendationDeviationTolerance)),
+					},
+					{
+						Record: "kube_apiserver_continuous_over_recommendation",
+						Expr:   intstr.FromString(fmt.Sprintf(`sum_over_time(kube_apiserver_over_recommendation[%dm]) >= bool %d`, recommendationDeviationDuration, recommendationDeviationDuration)),
+					},
+					{
+						Record: "kube_apiserver_under_recommendation",
+						Expr:   intstr.FromString(fmt.Sprintf(`sum by (pod,namespace) (rate(container_cpu_usage_seconds_total{namespace="shoot-control-plane", pod=~"(?i:Deployment-)?kube-apiserver-(.+)", container="kube-apiserver"}[5m])) < bool on(namespace) group_left kube_customresource_verticalpodautoscaler_status_recommendation_containerrecommendations_target_cpu{namespace=~".+", target_kind=~"Deployment", target_name=~"kube-apiserver", container=~"kube-apiserver|\\*"} * (1 - %f)`, recommendationDeviationTolerance)),
+					},
+					{
+						Record: "kube_apiserver_continuous_under_recommendation",
+						Expr:   intstr.FromString(fmt.Sprintf(`sum_over_time(kube_apiserver_under_recommendation[%dm]) >= bool %d`, recommendationDeviationDuration, recommendationDeviationDuration)),
+					},
+				},
+			}},
+		}
+		return nil
+	})
+	return err
 }
 
 func (v *vpa) computeFeatureGates() string {

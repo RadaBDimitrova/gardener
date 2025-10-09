@@ -17,35 +17,30 @@ import (
 	. "github.com/gardener/gardener/test/e2e/gardener"
 )
 
-// ItShouldCreateProject creates the project
-func ItShouldCreateProject(s *ProjectContext) {
+// CreateProject creates the project
+func CreateProject(ctx SpecContext, s *ProjectContext) {
 	GinkgoHelper()
+	Eventually(ctx, func() error {
+		if err := s.GardenClient.Create(ctx, s.Project); !apierrors.IsAlreadyExists(err) {
+			return err
+		}
 
-	It("Create Project", func(ctx SpecContext) {
-		Eventually(ctx, func() error {
-			if err := s.GardenClient.Create(ctx, s.Project); !apierrors.IsAlreadyExists(err) {
-				return err
-			}
-
-			return StopTrying("project already exists")
-		}).Should(Succeed())
-	}, SpecTimeout(time.Minute))
+		return StopTrying("project already exists")
+	}).Should(Succeed())
 }
 
-// ItShouldDeleteProject deletes the project
-func ItShouldDeleteProject(s *ProjectContext) {
+// DeleteProject deletes the project
+func DeleteProject(ctx SpecContext, s *ProjectContext) {
 	GinkgoHelper()
 
-	It("Delete Project", func(ctx SpecContext) {
-		Eventually(ctx, func(g Gomega) {
-			g.Expect(gardenerutils.ConfirmDeletion(ctx, s.GardenClient, s.Project)).To(Succeed())
-			g.Expect(s.GardenClient.Delete(ctx, s.Project)).To(Succeed())
-		}).Should(Succeed())
-	}, SpecTimeout(time.Minute))
+	Eventually(ctx, func(g Gomega) {
+		g.Expect(gardenerutils.ConfirmDeletion(ctx, s.GardenClient, s.Project)).To(Succeed())
+		g.Expect(s.GardenClient.Delete(ctx, s.Project)).To(Succeed())
+	}).Should(Succeed())
 }
 
-// ItShouldWaitForProjectToBeDeleted waits for the project to be gone
-func ItShouldWaitForProjectToBeDeleted(s *ProjectContext) {
+// WaitForProjectToBeDeleted waits for the project to be gone
+func WaitForProjectToBeDeleted(ctx SpecContext, s *ProjectContext) {
 	GinkgoHelper()
 
 	It("Wait for Project to be deleted", func(ctx SpecContext) {
@@ -61,17 +56,15 @@ func ItShouldWaitForProjectToBeDeleted(s *ProjectContext) {
 	}, SpecTimeout(5*time.Minute))
 }
 
-// ItShouldWaitForProjectToBeReconciledAndReady waits for the project to be reconciled successfully and ready.
-func ItShouldWaitForProjectToBeReconciledAndReady(s *ProjectContext) {
+// WaitForProjectToBeReconciledAndReady waits for the project to be reconciled successfully and ready.
+func WaitForProjectToBeReconciledAndReady(ctx SpecContext, s *ProjectContext) {
 	GinkgoHelper()
 
-	It("Wait for Project to be reconciled", func(ctx SpecContext) {
-		Eventually(ctx, func(g Gomega) {
-			g.Expect(s.GardenKomega.Get(s.Project)()).To(Succeed())
-			g.Expect(s.Project.Status.ObservedGeneration).To(Equal(s.Project.Generation))
-			g.Expect(s.Project.Status.Phase).To(Equal(gardencorev1beta1.ProjectReady))
-		}).WithPolling(5 * time.Second).Should(Succeed())
+	Eventually(ctx, func(g Gomega) {
+		g.Expect(s.GardenKomega.Get(s.Project)()).To(Succeed())
+		g.Expect(s.Project.Status.ObservedGeneration).To(Equal(s.Project.Generation))
+		g.Expect(s.Project.Status.Phase).To(Equal(gardencorev1beta1.ProjectReady))
+	}).WithPolling(5 * time.Second).Should(Succeed())
 
-		s.Log.Info("Project has been reconciled and is ready")
-	}, SpecTimeout(5*time.Minute))
+	s.Log.Info("Project has been reconciled and is ready")
 }

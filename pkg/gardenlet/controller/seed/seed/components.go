@@ -122,6 +122,7 @@ type components struct {
 	alertManager                  component.DeployWaiter
 	persesOperator                component.DeployWaiter
 	openTelemetryOperator         component.DeployWaiter
+	pvcautoscaler                 component.DeployWaiter
 }
 
 func (r *Reconciler) instantiateComponents(
@@ -271,6 +272,10 @@ func (r *Reconciler) instantiateComponents(
 		return
 	}
 	c.persesOperator, err = r.newPersesOperator()
+	if err != nil {
+		return
+	}
+	c.pvcautoscaler, err = r.newPVCAutoscaler()
 	if err != nil {
 		return
 	}
@@ -841,6 +846,15 @@ func (r *Reconciler) newOpenTelemetryOperator() (component.DeployWaiter, error) 
 		r.SeedClientSet.Client(),
 		r.GardenNamespace,
 		gardenlethelper.IsLoggingEnabled(&r.Config),
+		v1beta1constants.PriorityClassNameSeedSystem600,
+	)
+}
+
+func (r *Reconciler) newPVCAutoscaler() (component.DeployWaiter, error) {
+	return sharedcomponent.NewPVCAutoscaler(
+		r.SeedClientSet.Client(),
+		r.GardenNamespace,
+		features.DefaultFeatureGate.Enabled(features.PVCAutoscaler),
 		v1beta1constants.PriorityClassNameSeedSystem600,
 	)
 }

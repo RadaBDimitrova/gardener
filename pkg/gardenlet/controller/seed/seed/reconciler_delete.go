@@ -320,6 +320,11 @@ func (r *Reconciler) runDeleteSeedFlow(
 			SkipIf:       seedIsGarden || !vpaEnabled(seed.GetInfo().Spec.Settings),
 			Dependencies: flow.NewTaskIDs(ensureNoControllerInstallationsExist),
 		})
+		destroyPVCAutoscalerCRDs = g.Add(flow.Task{
+			Name:         "Destroy PVCAutoscaler-related custom resource definitions",
+			Fn:           component.OpDestroyAndWait(c.pvcautoscalerCRD).Destroy,
+			Dependencies: flow.NewTaskIDs(ensureNoControllerInstallationsExist),
+		})
 		destroyFluentCRDs = g.Add(flow.Task{
 			Name:         "Destroying Fluent Operator custom resource definitions",
 			Fn:           component.OpDestroyAndWait(c.fluentCRD).Destroy,
@@ -355,6 +360,7 @@ func (r *Reconciler) runDeleteSeedFlow(
 			destroyPrometheusCRDs,
 			destroyPersesCRDs,
 			destroyOpenTelemetryCRDs,
+			destroyPVCAutoscalerCRDs,
 		)
 
 		destroySystemResources = g.Add(flow.Task{

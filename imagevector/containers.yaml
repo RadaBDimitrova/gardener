@@ -206,6 +206,10 @@ images:
     sourceRepository: github.com/gardener/opentelemetry-collector
     repository: europe-docker.pkg.dev/gardener-project/releases/gardener/observability/opentelemetry-collector
     tag: "v0.0.1"
+  - name: pvc-autoscaler
+    sourceRepository: github.com/gardener/pvc-autoscaler
+    repository: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
+    tag: "v0.1.2"
   # Monitoring
   - name: prometheus-operator
     sourceRepository: github.com/prometheus-operator/prometheus-operator

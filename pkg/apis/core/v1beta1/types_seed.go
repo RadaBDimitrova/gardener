@@ -283,6 +283,10 @@ type SeedSettings struct {
 	// +optional
 	VerticalPodAutoscaler *SeedSettingVerticalPodAutoscaler `json:"verticalPodAutoscaler,omitempty" protobuf:"bytes,5,opt,name=verticalPodAutoscaler"`
 
+	// PersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.
+	// +optional
+	PersistentVolumeClaimAutoscaler *SeedSettingPersistentVolumeClaimAutoscaler `json:"persistentVolumeClaimAutoscaler,omitempty" protobuf:"bytes,5,opt,name=persistentVolumeClaimAutoscaler"`
+
 	// OwnerChecks is tombstoned to show why 6 is reserved protobuf tag.
 	// OwnerChecks *SeedSettingOwnerChecks `json:"ownerChecks,omitempty" protobuf:"bytes,6,opt,name=ownerChecks"`
 
@@ -409,6 +413,14 @@ type SeedSettingVerticalPodAutoscaler struct {
 	// Defaults to nil (no maximum).
 	// +optional
 	MaxAllowed corev1.ResourceList `json:"maxAllowed,omitempty" protobuf:"bytes,3,rep,name=maxAllowed,casttype=k8s.io/api/core/v1.ResourceList,castkey=k8s.io/api/core/v1.ResourceName"`
+}
+
+// SeedSettingPersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the
+// seed.
+type SeedSettingPersistentVolumeClaimAutoscaler struct {
+	// Enabled controls whether the PVC Autoscaler components shall be deployed into the garden namespace in the seed cluster. It
+	// is disabled by default, because it's still under active development.
+	Enabled bool `json:"enabled" protobuf:"bytes,1,opt,name=disabled"`
 }
 
 // SeedSettingDependencyWatchdog controls the dependency-watchdog settings for the seed.

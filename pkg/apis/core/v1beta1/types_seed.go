@@ -283,10 +283,6 @@ type SeedSettings struct {
 	// +optional
 	VerticalPodAutoscaler *SeedSettingVerticalPodAutoscaler `json:"verticalPodAutoscaler,omitempty" protobuf:"bytes,5,opt,name=verticalPodAutoscaler"`
 
-	// PersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.
-	// +optional
-	PersistentVolumeClaimAutoscaler *SeedSettingPersistentVolumeClaimAutoscaler `json:"persistentVolumeClaimAutoscaler,omitempty" protobuf:"bytes,5,opt,name=persistentVolumeClaimAutoscaler"`
-
 	// OwnerChecks is tombstoned to show why 6 is reserved protobuf tag.
 	// OwnerChecks *SeedSettingOwnerChecks `json:"ownerChecks,omitempty" protobuf:"bytes,6,opt,name=ownerChecks"`
 
@@ -297,6 +293,9 @@ type SeedSettings struct {
 	// See https://github.com/gardener/gardener/blob/master/docs/operations/topology_aware_routing.md.
 	// +optional
 	TopologyAwareRouting *SeedSettingTopologyAwareRouting `json:"topologyAwareRouting,omitempty" protobuf:"bytes,8,opt,name=topologyAwareRouting"`
+	// PersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.
+	// +optional
+	PersistentVolumeClaimAutoscaler *SeedSettingPersistentVolumeClaimAutoscaler `json:"persistentVolumeClaimAutoscaler,omitempty" protobuf:"bytes,9,opt,name=persistentVolumeClaimAutoscaler"`
 }
 
 // SeedSettingExcessCapacityReservation controls the excess capacity reservation for shoot control planes in the seed.

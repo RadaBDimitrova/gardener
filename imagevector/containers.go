@@ -121,8 +121,8 @@ const (
 	ContainerImageNamePrometheus = "prometheus"
 	// ContainerImageNamePrometheusOperator is a constant for an image in the image vector with name 'prometheus-operator'.
 	ContainerImageNamePrometheusOperator = "prometheus-operator"
-	// ContainerImageNamePVCAutoscaler is a constant for an image in the image vector with name 'pvc-autoscaler'.
-	ContainerImageNamePVCAutoscaler = "pvc-autoscaler"
+	// ContainerImageNamePvcAutoscaler is a constant for an image in the image vector with name 'pvc-autoscaler'.
+	ContainerImageNamePvcAutoscaler = "pvc-autoscaler"
 	// ContainerImageNameTelegraf is a constant for an image in the image vector with name 'telegraf'.
 	ContainerImageNameTelegraf = "telegraf"
 	// ContainerImageNameTerminalControllerManager is a constant for an image in the image vector with name 'terminal-controller-manager'.

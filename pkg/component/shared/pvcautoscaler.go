@@ -21,7 +21,7 @@ func NewPVCAutoscaler(
 	deployer component.DeployWaiter,
 	err error,
 ) {
-	image, err := imagevector.Containers().FindImage(imagevector.ContainerImageNamePVCAutoscaler)
+	image, err := imagevector.Containers().FindImage(imagevector.ContainerImageNamePvcAutoscaler)
 	if err != nil {
 		return nil, err
 	}

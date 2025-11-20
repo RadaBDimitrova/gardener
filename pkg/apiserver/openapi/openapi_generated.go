@@ -193,6 +193,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingLoadBalancerServices":             schema_pkg_apis_core_v1beta1_SeedSettingLoadBalancerServices(ref),
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingLoadBalancerServicesZonalIngress": schema_pkg_apis_core_v1beta1_SeedSettingLoadBalancerServicesZonalIngress(ref),
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingLoadBalancerServicesZones":        schema_pkg_apis_core_v1beta1_SeedSettingLoadBalancerServicesZones(ref),
+		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingPersistentVolumeClaimAutoscaler":  schema_pkg_apis_core_v1beta1_SeedSettingPersistentVolumeClaimAutoscaler(ref),
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingScheduling":                       schema_pkg_apis_core_v1beta1_SeedSettingScheduling(ref),
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingTopologyAwareRouting":             schema_pkg_apis_core_v1beta1_SeedSettingTopologyAwareRouting(ref),
 		"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingVerticalPodAutoscaler":            schema_pkg_apis_core_v1beta1_SeedSettingVerticalPodAutoscaler(ref),
@@ -8529,6 +8530,28 @@ func schema_pkg_apis_core_v1beta1_SeedSettingLoadBalancerServicesZones(ref commo
 	}
 }
 
+func schema_pkg_apis_core_v1beta1_SeedSettingPersistentVolumeClaimAutoscaler(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "SeedSettingPersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"enabled": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Enabled controls whether the PVC Autoscaler components shall be deployed into the garden namespace in the seed cluster. It is disabled by default, because it's still under active development.",
+							Default:     false,
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"enabled"},
+			},
+		},
+	}
+}
+
 func schema_pkg_apis_core_v1beta1_SeedSettingScheduling(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -8670,11 +8693,17 @@ func schema_pkg_apis_core_v1beta1_SeedSettings(ref common.ReferenceCallback) com
 							Ref:         ref("github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingTopologyAwareRouting"),
 						},
 					},
+					"persistentVolumeClaimAutoscaler": {
+						SchemaProps: spec.SchemaProps{
+							Description: "PersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.",
+							Ref:         ref("github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingPersistentVolumeClaimAutoscaler"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingDependencyWatchdog", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingExcessCapacityReservation", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingLoadBalancerServices", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingScheduling", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingTopologyAwareRouting", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingVerticalPodAutoscaler"},
+			"github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingDependencyWatchdog", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingExcessCapacityReservation", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingLoadBalancerServices", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingPersistentVolumeClaimAutoscaler", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingScheduling", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingTopologyAwareRouting", "github.com/gardener/gardener/pkg/apis/core/v1beta1.SeedSettingVerticalPodAutoscaler"},
 	}
 }
 

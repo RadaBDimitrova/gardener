@@ -11577,6 +11577,38 @@ Defaults to nil, which is equivalent to not allowing ProxyProtocol.</p>
 </tr>
 </tbody>
 </table>
+<h3 id="core.gardener.cloud/v1beta1.SeedSettingPersistentVolumeClaimAutoscaler">SeedSettingPersistentVolumeClaimAutoscaler
+</h3>
+<p>
+(<em>Appears on:</em>
+<a href="#core.gardener.cloud/v1beta1.SeedSettings">SeedSettings</a>)
+</p>
+<p>
+<p>SeedSettingPersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the
+seed.</p>
+</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>
+<code>enabled</code></br>
+<em>
+bool
+</em>
+</td>
+<td>
+<p>Enabled controls whether the PVC Autoscaler components shall be deployed into the garden namespace in the seed cluster. It
+is disabled by default, because it&rsquo;s still under active development.</p>
+</td>
+</tr>
+</tbody>
+</table>
 <h3 id="core.gardener.cloud/v1beta1.SeedSettingScheduling">SeedSettingScheduling
 </h3>
 <p>
@@ -11802,6 +11834,20 @@ SeedSettingTopologyAwareRouting
 <em>(Optional)</em>
 <p>TopologyAwareRouting controls certain settings for topology-aware traffic routing in the seed.
 See <a href="https://github.com/gardener/gardener/blob/master/docs/operations/topology_aware_routing.md">https://github.com/gardener/gardener/blob/master/docs/operations/topology_aware_routing.md</a>.</p>
+</td>
+</tr>
+<tr>
+<td>
+<code>persistentVolumeClaimAutoscaler</code></br>
+<em>
+<a href="#core.gardener.cloud/v1beta1.SeedSettingPersistentVolumeClaimAutoscaler">
+SeedSettingPersistentVolumeClaimAutoscaler
+</a>
+</em>
+</td>
+<td>
+<em>(Optional)</em>
+<p>PersistentVolumeClaimAutoscaler controls certain settings for the persistent volume claim autoscaler components deployed in the seed.</p>
 </td>
 </tr>
 </tbody>

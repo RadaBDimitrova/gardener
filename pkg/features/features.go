@@ -74,11 +74,6 @@ const (
 	// owner: @hown3d
 	// alpha: v1.130.0
 	UseUnifiedHTTPProxyPort featuregate.Feature = "UseUnifiedHTTPProxyPort"
-
-	// PVCAutoscaler enables the autoscaling of persistent volumes.
-	// owner: @Kostov6 @plkokanov @RadaBDimitrova
-	// alpha: v1.138.0
-	PVCAutoscaler featuregate.Feature = "PVCAutoscaler"
 )
 
 // DefaultFeatureGate is the central feature gate map used by all gardener components.
@@ -115,7 +110,6 @@ var AllFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	DoNotCopyBackupCredentials: {Default: true, PreRelease: featuregate.Beta},
 	OpenTelemetryCollector:     {Default: false, PreRelease: featuregate.Alpha},
 	UseUnifiedHTTPProxyPort:    {Default: false, PreRelease: featuregate.Alpha},
-	PVCAutoscaler:              {Default: false, PreRelease: featuregate.Alpha},
 }
 
 // GetFeatures returns a feature gate map with the respective specifications. Non-existing feature gates are ignored.

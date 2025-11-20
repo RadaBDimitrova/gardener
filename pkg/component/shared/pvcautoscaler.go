@@ -16,7 +16,6 @@ import (
 func NewPVCAutoscaler(
 	c client.Client,
 	gardenNamespaceName string,
-	enabled bool,
 	priorityClassName string,
 ) (
 	deployer component.DeployWaiter,
@@ -35,10 +34,6 @@ func NewPVCAutoscaler(
 			PriorityClassName: priorityClassName,
 		},
 	)
-
-	if !enabled {
-		deployer = component.OpDestroyAndWait(deployer)
-	}
 
 	return deployer, nil
 }

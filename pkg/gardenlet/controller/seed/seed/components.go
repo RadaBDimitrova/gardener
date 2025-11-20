@@ -182,7 +182,7 @@ func (r *Reconciler) instantiateComponents(
 	if err != nil {
 		return
 	}
-	if !features.DefaultFeatureGate.Enabled(features.PVCAutoscaler) {
+	if !pvcAutoscalerEnabled(seed.GetInfo().Spec.Settings) {
 		c.pvcautoscalerCRD = component.OpDestroyAndWait(c.pvcautoscalerCRD)
 	}
 
@@ -284,7 +284,7 @@ func (r *Reconciler) instantiateComponents(
 	if err != nil {
 		return
 	}
-	c.pvcautoscaler, err = r.newPVCAutoscaler()
+	c.pvcautoscaler, err = r.newPVCAutoscaler(seed.GetInfo().Spec.Settings)
 	if err != nil {
 		return
 	}
@@ -859,13 +859,21 @@ func (r *Reconciler) newOpenTelemetryOperator() (component.DeployWaiter, error) 
 	)
 }
 
-func (r *Reconciler) newPVCAutoscaler() (component.DeployWaiter, error) {
-	return sharedcomponent.NewPVCAutoscaler(
+func (r *Reconciler) newPVCAutoscaler(settings *gardencorev1beta1.SeedSettings) (component.DeployWaiter, error) {
+	pvcAutoscaler, err := sharedcomponent.NewPVCAutoscaler(
 		r.SeedClientSet.Client(),
 		r.GardenNamespace,
-		features.DefaultFeatureGate.Enabled(features.PVCAutoscaler),
 		v1beta1constants.PriorityClassNameSeedSystem600,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if !pvcAutoscalerEnabled(settings) {
+		return component.OpDestroyWithoutWait(pvcAutoscaler), nil
+	}
+
+	return pvcAutoscaler, nil
 }
 
 func (r *Reconciler) newClusterAutoscaler() component.DeployWaiter {

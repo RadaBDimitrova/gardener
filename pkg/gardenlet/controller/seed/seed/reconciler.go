@@ -283,3 +283,7 @@ func determineClusterIdentity(ctx context.Context, c client.Client) (string, err
 func vpaEnabled(settings *gardencorev1beta1.SeedSettings) bool {
 	return settings == nil || settings.VerticalPodAutoscaler == nil || settings.VerticalPodAutoscaler.Enabled
 }
+
+func pvcAutoscalerEnabled(settings *gardencorev1beta1.SeedSettings) bool {
+	return settings != nil && settings.PersistentVolumeClaimAutoscaler != nil && settings.PersistentVolumeClaimAutoscaler.Enabled
+}

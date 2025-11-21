@@ -12,6 +12,7 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
+	pvcautoscalerv1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -254,6 +255,10 @@ func (v *vali) Deploy(ctx context.Context) error {
 		v.getServiceMonitor(),
 		v.getPrometheusRule(),
 	)
+
+	if v.values.ClusterType == component.ClusterTypeShoot {
+		resources = append(resources, v.getPVCA(resource.MustParse("300Gi")))
+	}
 
 	if err := registry.Add(resources...); err != nil {
 		return err
@@ -979,6 +984,26 @@ func (v *vali) getPrometheusRule() *monitoringv1.PrometheusRule {
 			}},
 		},
 	}
+}
+
+func (v *vali) getPVCA(storage resource.Quantity) *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler {
+	obj := &pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      valiconstants.ManagedResourceNameRuntime,
+			Namespace: v.namespace,
+			Labels:    getLabels(),
+		},
+		Spec: pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscalerSpec{
+			ScaleTargetRef: corev1.LocalObjectReference{
+				Name: valiconstants.ManagedResourceNameRuntime + "-vali-0",
+			},
+			IncreaseBy:  "20%",
+			Threshold:   "50%",
+			MaxCapacity: storage,
+		},
+	}
+
+	return obj
 }
 
 func getLabels() map[string]string {

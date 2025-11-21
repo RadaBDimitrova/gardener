@@ -27,6 +27,7 @@ import (
 	"github.com/gardener/gardener/pkg/utils"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
 	secretsmanager "github.com/gardener/gardener/pkg/utils/secrets/manager"
+	pvcautoscalerv1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 )
 
 const (
@@ -233,12 +234,14 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 		roleBinding        *rbacv1.RoleBinding
 		gardenRoleBinding  *rbacv1.RoleBinding
 		clusterRoleBinding *rbacv1.ClusterRoleBinding
+		pvca               *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler
 	)
 
 	if p.values.ClusterType == component.ClusterTypeShoot {
 		role = p.role()
 		roleBinding = p.roleBinding()
 		gardenRoleBinding = p.gardenRoleBinding()
+		pvca = p.pvca(resource.MustParse("300Gi"))
 	} else {
 		clusterRoleBinding = p.clusterRoleBinding()
 	}
@@ -258,6 +261,7 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 		p.vpa(),
 		p.podDisruptionBudget(),
 		ingress,
+		pvca,
 	)
 	if err != nil {
 		return err

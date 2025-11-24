@@ -6,6 +6,7 @@ package prometheus
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -15,12 +16,15 @@ import (
 	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
+	resourcesv1alpha1 "github.com/gardener/gardener/pkg/apis/resources/v1alpha1"
 	"github.com/gardener/gardener/pkg/client/kubernetes"
 	"github.com/gardener/gardener/pkg/component"
 	monitoringutils "github.com/gardener/gardener/pkg/component/observability/monitoring/utils"
@@ -108,6 +112,8 @@ type Values struct {
 	RestrictToNamespace bool
 	// ResourceRequests defines the initial resource requests
 	ResourceRequests *corev1.ResourceList
+	// PVCAutoScalerEnabled controls whether the PVC autoscaler should be created for Prometheus.
+	PVCAutoScalerEnabled bool
 }
 
 // CentralConfigs contains configuration for this Prometheus instance that is created together with it. This should
@@ -241,7 +247,21 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 		role = p.role()
 		roleBinding = p.roleBinding()
 		gardenRoleBinding = p.gardenRoleBinding()
-		pvca = p.pvca(resource.MustParse("300Gi"))
+
+		if p.values.PVCAutoScalerEnabled {
+			pvca = p.pvca(resource.MustParse("300Gi"))
+			managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: p.name(), Namespace: p.namespace}}
+			if err := p.client.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
+				if apierrors.IsNotFound(err) {
+					p.log.Info("Setting prometheus storage capacity to 3Gi for newly created shoot")
+					storage, err := resource.ParseQuantity("3Gi")
+					if err != nil {
+						return fmt.Errorf("error when setting initial PVC storage to %s: %w", "3Gi", err)
+					}
+					p.values.StorageCapacity = storage
+				}
+			}
+		}
 	} else {
 		clusterRoleBinding = p.clusterRoleBinding()
 	}

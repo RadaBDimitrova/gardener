@@ -124,6 +124,7 @@ func (b *Botanist) DefaultPrometheus() (prometheus.Interface, error) {
 			corev1.ResourceCPU:    resource.MustParse("150m"),
 			corev1.ResourceMemory: resource.MustParse("100M"),
 		},
+		PVCAutoScalerEnabled: b.IsPVCAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings),
 	}
 
 	if b.Shoot.WantsAlertmanager {

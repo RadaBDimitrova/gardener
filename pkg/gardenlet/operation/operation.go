@@ -507,3 +507,8 @@ func (o *Operation) DeleteSecret(key string) {
 
 	delete(o.secrets, key)
 }
+
+// isPVCAutoscalerEnabled returns true if the PVC autoscaler is enabled in the given SeedSettings.
+func (o *Operation) IsPVCAutoscalerEnabled(settings *gardencorev1beta1.SeedSettings) bool {
+	return settings != nil && settings.PersistentVolumeClaimAutoscaler != nil && settings.PersistentVolumeClaimAutoscaler.Enabled
+}

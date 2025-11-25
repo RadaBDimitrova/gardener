@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strconv"
 
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	"github.com/gardener/gardener/imagevector"
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
 	"github.com/gardener/gardener/pkg/component"
@@ -20,7 +22,6 @@ import (
 	"github.com/gardener/gardener/pkg/features"
 	gardenlethelper "github.com/gardener/gardener/pkg/gardenlet/apis/config/v1alpha1/helper"
 	imagevectorutils "github.com/gardener/gardener/pkg/utils/imagevector"
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // DeployLogging will install the logging stack for the Shoot in the Seed clusters.

@@ -20,6 +20,7 @@ import (
 	"github.com/gardener/gardener/pkg/features"
 	gardenlethelper "github.com/gardener/gardener/pkg/gardenlet/apis/config/v1alpha1/helper"
 	imagevectorutils "github.com/gardener/gardener/pkg/utils/imagevector"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // DeployLogging will install the logging stack for the Shoot in the Seed clusters.
@@ -116,6 +117,23 @@ func (b *Botanist) DefaultEventLogger() (component.Deployer, error) {
 
 // DefaultVali returns a deployer for Vali.
 func (b *Botanist) DefaultVali() (vali.Interface, error) {
+	var (
+		storage     *resource.Quantity
+		maxCapacity *resource.Quantity
+	)
+	if b.IsPVCAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings) {
+		parsedStorage, err := resource.ParseQuantity("2Gi")
+		if err != nil {
+			return nil, fmt.Errorf("error when setting initial PVC storage to %s: %w", "2Gi", err)
+		}
+		storage = &parsedStorage
+		parsedMaxCapacity, err := resource.ParseQuantity("200Gi")
+		if err != nil {
+			return nil, fmt.Errorf("error when setting max PVC capacity to %s: %w", "200Gi", err)
+		}
+		maxCapacity = &parsedMaxCapacity
+	}
+
 	return shared.NewVali(
 		b.SeedClientSet.Client(),
 		b.Shoot.ControlPlaneNamespace,
@@ -124,9 +142,11 @@ func (b *Botanist) DefaultVali() (vali.Interface, error) {
 		b.Shoot.GetReplicas(1),
 		b.isShootNodeLoggingEnabled() && !features.DefaultFeatureGate.Enabled(features.OpenTelemetryCollector),
 		v1beta1constants.PriorityClassNameShootControlPlane100,
-		nil,
+		storage,
+		maxCapacity,
 		b.ComputeValiHost(),
 		false,
+		b.IsPVCAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings),
 	)
 }
 

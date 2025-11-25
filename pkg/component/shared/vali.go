@@ -24,8 +24,10 @@ func NewVali(
 	isShootNodeLoggingEnabled bool,
 	priorityClassName string,
 	storage *resource.Quantity,
+	maxCapacity *resource.Quantity,
 	ingressHost string,
 	isGardenCluster bool,
+	pvcAutoscalerEnabled bool,
 ) (
 	vali.Interface,
 	error,
@@ -65,9 +67,11 @@ func NewVali(
 		ShootNodeLoggingEnabled: isShootNodeLoggingEnabled,
 		PriorityClassName:       priorityClassName,
 		Storage:                 storage,
+		MaxCapacity:             maxCapacity,
 		ClusterType:             clusterType,
 		IngressHost:             ingressHost,
 		IsGardenCluster:         isGardenCluster,
+		PVCAutoscalerEnabled:    pvcAutoscalerEnabled,
 	})
 
 	return deployer, nil

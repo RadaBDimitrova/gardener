@@ -123,6 +123,8 @@ type Values struct {
 	IngressHost             string
 	ShootNodeLoggingEnabled bool
 	Storage                 *resource.Quantity
+	MaxCapacity             *resource.Quantity
+	PVCAutoscalerEnabled    bool
 }
 
 // Interface is the interface for the Vali deployer.
@@ -160,6 +162,7 @@ func (v *vali) WithAuthenticationProxy(b bool) {
 func (v *vali) Deploy(ctx context.Context) error {
 	var (
 		registry  = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+		pvca      *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler
 		resources []client.Object
 	)
 
@@ -246,18 +249,28 @@ func (v *vali) Deploy(ctx context.Context) error {
 	}
 
 	valiConfigMap := v.getValiConfigMap()
+	managedResourcePresent := true
+	managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: valiconstants.ManagedResourceNameRuntime, Namespace: v.namespace}}
+	if err := v.client.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("failed getting vali managed resource: %w", err)
+		}
+		managedResourcePresent = false
+	}
+	shouldUpdateStorage := !v.values.PVCAutoscalerEnabled || !managedResourcePresent
 
 	resources = append(resources,
 		valiConfigMap,
 		v.getService(),
 		v.getVPA(),
-		v.getStatefulSet(valiConfigMap.Name, telegrafConfigMapName, genericTokenKubeconfigSecretName),
+		v.getStatefulSet(shouldUpdateStorage, valiConfigMap.Name, telegrafConfigMapName, genericTokenKubeconfigSecretName),
 		v.getServiceMonitor(),
 		v.getPrometheusRule(),
 	)
 
-	if v.values.ClusterType == component.ClusterTypeShoot {
-		resources = append(resources, v.getPVCA(resource.MustParse("300Gi")))
+	if v.values.PVCAutoscalerEnabled && v.values.MaxCapacity != nil {
+		pvca = v.getPVCA(*v.values.MaxCapacity)
+		resources = append(resources, pvca)
 	}
 
 	if err := registry.Add(resources...); err != nil {
@@ -507,7 +520,7 @@ func (v *vali) getTelegrafConfigMap() (*corev1.ConfigMap, error) {
 	return configMap, nil
 }
 
-func (v *vali) getStatefulSet(valiConfigMapName, telegrafConfigMapName, genericTokenKubeconfigSecretName string) *appsv1.StatefulSet {
+func (v *vali) getStatefulSet(shouldUpdateStorage bool, valiConfigMapName, telegrafConfigMapName, genericTokenKubeconfigSecretName string) *appsv1.StatefulSet {
 	var (
 		fsGroupChangeOnRootMismatch = corev1.FSGroupChangeOnRootMismatch
 
@@ -684,7 +697,7 @@ func (v *vali) getStatefulSet(valiConfigMapName, telegrafConfigMapName, genericT
 		}
 	)
 
-	if v.values.Storage != nil {
+	if v.values.Storage != nil && shouldUpdateStorage {
 		statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests[corev1.ResourceStorage] = *v.values.Storage
 	}
 	if !v.values.ShootNodeLoggingEnabled || (!v.values.IsGardenCluster && features.DefaultFeatureGate.Enabled(features.OpenTelemetryCollector)) {
@@ -986,7 +999,7 @@ func (v *vali) getPrometheusRule() *monitoringv1.PrometheusRule {
 	}
 }
 
-func (v *vali) getPVCA(storage resource.Quantity) *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler {
+func (v *vali) getPVCA(maxCapacity resource.Quantity) *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler {
 	obj := &pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      valiconstants.ManagedResourceNameRuntime,
@@ -999,7 +1012,7 @@ func (v *vali) getPVCA(storage resource.Quantity) *pvcautoscalerv1alpha1.Persist
 			},
 			IncreaseBy:  "20%",
 			Threshold:   "50%",
-			MaxCapacity: storage,
+			MaxCapacity: maxCapacity,
 		},
 	}
 
@@ -1069,8 +1082,11 @@ func (v *vali) resizeOrDeleteValiDataVolumeIfStorageNotTheSame(ctx context.Conte
 		}
 
 	case storageCmpResult < 0:
-		if err := client.IgnoreNotFound(v.client.Delete(ctx, pvc)); err != nil {
-			return err
+		// if pvc-autoscaler is enabled we don't delete the PVC if it is smaller
+		if !v.values.PVCAutoscalerEnabled {
+			if err := client.IgnoreNotFound(v.client.Delete(ctx, pvc)); err != nil {
+				return err
+			}
 		}
 	}
 

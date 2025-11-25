@@ -539,9 +539,25 @@ func (r *Reconciler) newSystem(seed *gardencorev1beta1.Seed) (component.DeployWa
 }
 
 func (r *Reconciler) newVali() (component.Deployer, error) {
-	var storage *resource.Quantity
+	var (
+		storage     *resource.Quantity
+		maxCapacity *resource.Quantity
+	)
 	if r.Config.Logging != nil && r.Config.Logging.Vali != nil && r.Config.Logging.Vali.Garden != nil {
 		storage = r.Config.Logging.Vali.Garden.Storage
+	}
+
+	if pvcAutoscalerEnabled(r.Config.SeedConfig.Spec.Settings) {
+		parsedStorage, err := resource.ParseQuantity("3Gi")
+		if err != nil {
+			return nil, fmt.Errorf("error when setting initial PVC storage to %s: %w", "3Gi", err)
+		}
+		storage = &parsedStorage
+		parsedMaxCapacity, err := resource.ParseQuantity("300Gi")
+		if err != nil {
+			return nil, fmt.Errorf("error when setting max PVC capacity to %s: %w", "300Gi", err)
+		}
+		maxCapacity = &parsedMaxCapacity
 	}
 
 	deployer, err := sharedcomponent.NewVali(
@@ -553,8 +569,10 @@ func (r *Reconciler) newVali() (component.Deployer, error) {
 		false,
 		v1beta1constants.PriorityClassNameSeedSystem600,
 		storage,
+		maxCapacity,
 		"",
 		false,
+		pvcAutoscalerEnabled(r.Config.SeedConfig.Spec.Settings),
 	)
 	if err != nil {
 		return nil, err

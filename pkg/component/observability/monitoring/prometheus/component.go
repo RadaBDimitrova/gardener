@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
+	pvcautoscalerv1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
@@ -31,7 +32,6 @@ import (
 	"github.com/gardener/gardener/pkg/utils"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
 	secretsmanager "github.com/gardener/gardener/pkg/utils/secrets/manager"
-	pvcautoscalerv1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 )
 
 const (
@@ -72,6 +72,8 @@ type Values struct {
 	PriorityClassName string
 	// StorageCapacity is the storage capacity of Prometheus.
 	StorageCapacity resource.Quantity
+	// MaxCapacity is the maximum storage capacity of Prometheus.
+	MaxCapacity resource.Quantity
 	// Replicas is the number of replicas.
 	Replicas int32
 	// Retention is the duration for the data retention.
@@ -247,23 +249,29 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 		role = p.role()
 		roleBinding = p.roleBinding()
 		gardenRoleBinding = p.gardenRoleBinding()
-
-		if p.values.PVCAutoScalerEnabled {
-			pvca = p.pvca(resource.MustParse("300Gi"))
-			managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: p.name(), Namespace: p.namespace}}
-			if err := p.client.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
-				if apierrors.IsNotFound(err) {
-					p.log.Info("Setting prometheus storage capacity to 3Gi for newly created shoot")
-					storage, err := resource.ParseQuantity("3Gi")
-					if err != nil {
-						return fmt.Errorf("error when setting initial PVC storage to %s: %w", "3Gi", err)
-					}
-					p.values.StorageCapacity = storage
-				}
-			}
-		}
 	} else {
 		clusterRoleBinding = p.clusterRoleBinding()
+	}
+
+	if p.values.PVCAutoScalerEnabled {
+		pvca = p.pvca(p.values.MaxCapacity)
+		managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: p.name(), Namespace: p.namespace}}
+		var startStorageCapacity string
+		if p.values.ClusterType == component.ClusterTypeShoot {
+			startStorageCapacity = "2Gi"
+		} else {
+			startStorageCapacity = "3Gi"
+		}
+		if err := p.client.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
+			if apierrors.IsNotFound(err) {
+				p.log.Info("Setting prometheus storage capacity to starting StorageCapacity for newly created shoot")
+				storage, err := resource.ParseQuantity(startStorageCapacity)
+				if err != nil {
+					return fmt.Errorf("error when setting initial PVC storage to %s: %w", startStorageCapacity, err)
+				}
+				p.values.StorageCapacity = storage
+			}
+		}
 	}
 
 	resources, err := registry.AddAllAndSerialize(

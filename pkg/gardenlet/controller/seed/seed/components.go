@@ -625,6 +625,7 @@ func (r *Reconciler) newCachePrometheus(log logr.Logger, seed *seedpkg.Seed, see
 		Name:              "cache",
 		PriorityClassName: v1beta1constants.PriorityClassNameSeedSystem600,
 		StorageCapacity:   resource.MustParse(seed.GetValidVolumeSize("10Gi")),
+		MaxCapacity:       resource.MustParse(seed.GetValidVolumeSize("300Gi")),
 		Replicas:          1,
 		Retention:         ptr.To(monitoringv1.Duration("1d")),
 		RetentionSize:     "5GB",
@@ -640,6 +641,7 @@ func (r *Reconciler) newCachePrometheus(log logr.Logger, seed *seedpkg.Seed, see
 			cacheprometheus.NetworkPolicyToNodeExporter(r.GardenNamespace, seed.GetNodeCIDR()),
 			cacheprometheus.NetworkPolicyToKubelet(r.GardenNamespace, seed.GetNodeCIDR()),
 		},
+		PVCAutoScalerEnabled: pvcAutoscalerEnabled(seed.GetInfo().Spec.Settings),
 	})
 }
 
@@ -648,6 +650,7 @@ func (r *Reconciler) newSeedPrometheus(log logr.Logger, seed *seedpkg.Seed) (com
 		Name:              "seed",
 		PriorityClassName: v1beta1constants.PriorityClassNameSeedSystem600,
 		StorageCapacity:   resource.MustParse(seed.GetValidVolumeSize("100Gi")),
+		MaxCapacity:       resource.MustParse(seed.GetValidVolumeSize("300Gi")),
 		Replicas:          1,
 		RetentionSize:     "85GB",
 		VPAMinAllowed:     &corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("400Mi")},
@@ -664,6 +667,7 @@ func (r *Reconciler) newSeedPrometheus(log logr.Logger, seed *seedpkg.Seed) (com
 			PodMonitors:   seedprometheus.CentralPodMonitors(),
 			ScrapeConfigs: seedprometheus.CentralScrapeConfigs(),
 		},
+		PVCAutoScalerEnabled: pvcAutoscalerEnabled(seed.GetInfo().Spec.Settings),
 	})
 }
 
@@ -672,6 +676,7 @@ func (r *Reconciler) newAggregatePrometheus(log logr.Logger, seed *seedpkg.Seed,
 		Name:              "aggregate",
 		PriorityClassName: v1beta1constants.PriorityClassNameSeedSystem600,
 		StorageCapacity:   resource.MustParse(seed.GetValidVolumeSize("20Gi")),
+		MaxCapacity:       resource.MustParse(seed.GetValidVolumeSize("300Gi")),
 		Replicas:          1,
 		Retention:         ptr.To(monitoringv1.Duration("30d")),
 		RetentionSize:     "15GB",
@@ -693,6 +698,7 @@ func (r *Reconciler) newAggregatePrometheus(log logr.Logger, seed *seedpkg.Seed,
 			SecretsManager: secretsManager,
 			SigningCA:      v1beta1constants.SecretNameCASeed,
 		},
+		PVCAutoScalerEnabled: pvcAutoscalerEnabled(seed.GetInfo().Spec.Settings),
 	}
 
 	if globalMonitoringSecret != nil {

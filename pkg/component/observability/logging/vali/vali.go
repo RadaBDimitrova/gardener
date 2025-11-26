@@ -161,9 +161,10 @@ func (v *vali) WithAuthenticationProxy(b bool) {
 
 func (v *vali) Deploy(ctx context.Context) error {
 	var (
-		registry  = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
-		pvca      *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler
-		resources []client.Object
+		registry     = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+		pvcaRegistry = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+		pvca         *pvcautoscalerv1alpha1.PersistentVolumeClaimAutoscaler
+		resources    []client.Object
 	)
 
 	if v.values.Storage != nil {
@@ -270,7 +271,13 @@ func (v *vali) Deploy(ctx context.Context) error {
 
 	if v.values.PVCAutoscalerEnabled && v.values.MaxCapacity != nil {
 		pvca = v.getPVCA(*v.values.MaxCapacity)
-		resources = append(resources, pvca)
+		pvcaSerialized, err := pvcaRegistry.AddAllAndSerialize(pvca)
+		if err != nil {
+			return err
+		}
+		if err := managedresources.CreateForSeedWithLabels(ctx, v.client, v.namespace, "pvca-"+valiconstants.ManagedResourceNameRuntime, false, map[string]string{"test-delete": "true"}, pvcaSerialized); err != nil {
+			return err
+		}
 	}
 
 	if err := registry.Add(resources...); err != nil {

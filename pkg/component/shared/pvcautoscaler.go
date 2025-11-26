@@ -10,6 +10,7 @@ import (
 	"github.com/gardener/gardener/imagevector"
 	"github.com/gardener/gardener/pkg/component"
 	"github.com/gardener/gardener/pkg/component/autoscaling/pvcautoscaler"
+	"github.com/go-logr/logr"
 )
 
 // NewPVCAutoscaler instantiates a new `PVCAutoscaler` component.
@@ -17,6 +18,7 @@ func NewPVCAutoscaler(
 	c client.Client,
 	gardenNamespaceName string,
 	priorityClassName string,
+	logger logr.Logger,
 ) (
 	deployer component.DeployWaiter,
 	err error,
@@ -33,6 +35,7 @@ func NewPVCAutoscaler(
 			Image:             image.String(),
 			PriorityClassName: priorityClassName,
 		},
+		logger,
 	)
 
 	return deployer, nil

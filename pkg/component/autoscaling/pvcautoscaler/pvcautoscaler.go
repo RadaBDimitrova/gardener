@@ -6,6 +6,7 @@ package pvcautoscaler
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -26,6 +27,7 @@ import (
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
+	"github.com/go-logr/logr"
 )
 
 const (
@@ -50,6 +52,7 @@ type pvcautoscaler struct {
 	client    client.Client
 	namespace string
 	values    Values
+	log       logr.Logger
 }
 
 // NewPVCAutoscaler creates a new instance of PVCAutoscaler.
@@ -57,11 +60,13 @@ func NewPVCAutoscaler(
 	client client.Client,
 	namespace string,
 	values Values,
+	log logr.Logger,
 ) component.DeployWaiter {
 	return &pvcautoscaler{
 		client:    client,
 		namespace: namespace,
 		values:    values,
+		log:       log,
 	}
 }
 
@@ -104,6 +109,26 @@ func (p *pvcautoscaler) Deploy(ctx context.Context) error {
 }
 
 func (p *pvcautoscaler) Destroy(ctx context.Context) error {
+	managedResourceList := &resourcesv1alpha1.ManagedResourceList{}
+	if err := p.client.List(ctx, managedResourceList,
+		client.MatchingLabels{"test-delete": "true"}); err != nil {
+		// If we can't list them, just ignore and continue with main deletion
+		_ = err
+	} else if len(managedResourceList.Items) > 0 {
+		// Delete all found ManagedResources
+		for _, mr := range managedResourceList.Items {
+			p.log.Info("Deleting test ManagedResource", "name", mr.Name, "namespace", mr.Namespace)
+			if err = p.client.Delete(ctx, &mr); err != nil {
+				return fmt.Errorf("failed to delete test ManagedResource %s/%s: %w", mr.Namespace, mr.Name, err)
+			}
+		}
+		p.log.Info("All test ManagedResources deleted")
+		// Wait for them to be deleted properly
+		if err = managedresources.WaitUntilListDeleted(ctx, p.client, managedResourceList, client.MatchingLabels{"test-delete": "true"}); err != nil {
+			return fmt.Errorf("failed to wait for deletion of ManagedResources: %w", err)
+		}
+		p.log.Info("All test ManagedResources deletion confirmed")
+	}
 	return managedresources.DeleteForSeed(ctx, p.client, p.namespace, PVCAutoscalerManagedResourceName)
 }
 

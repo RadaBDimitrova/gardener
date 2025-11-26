@@ -217,7 +217,10 @@ type prometheus struct {
 }
 
 func (p *prometheus) Deploy(ctx context.Context) error {
-	registry := managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+	var (
+		registry     = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+		pvcaRegistry = managedresources.NewRegistry(kubernetes.SeedScheme, kubernetes.SeedCodec, kubernetes.SeedSerializer)
+	)
 
 	if err := p.addCentralConfigsToRegistry(registry); err != nil {
 		return err
@@ -254,7 +257,6 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 	}
 
 	if p.values.PVCAutoScalerEnabled {
-		pvca = p.pvca(p.values.MaxCapacity)
 		managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: p.name(), Namespace: p.namespace}}
 		var startStorageCapacity string
 		if p.values.ClusterType == component.ClusterTypeShoot {
@@ -271,6 +273,14 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 				}
 				p.values.StorageCapacity = storage
 			}
+		}
+		pvca = p.pvca(p.values.MaxCapacity)
+		pvcaSerialized, err := pvcaRegistry.AddAllAndSerialize(pvca)
+		if err != nil {
+			return err
+		}
+		if err := managedresources.CreateForSeedWithLabels(ctx, p.client, p.namespace, "pvca-"+p.name(), false, map[string]string{"test-delete": "true"}, pvcaSerialized); err != nil {
+			return err
 		}
 	}
 
@@ -289,7 +299,6 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 		p.vpa(),
 		p.podDisruptionBudget(),
 		ingress,
-		pvca,
 	)
 	if err != nil {
 		return err

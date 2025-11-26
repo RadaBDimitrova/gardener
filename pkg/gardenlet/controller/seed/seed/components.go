@@ -284,7 +284,7 @@ func (r *Reconciler) instantiateComponents(
 	if err != nil {
 		return
 	}
-	c.pvcautoscaler, err = r.newPVCAutoscaler(seed.GetInfo().Spec.Settings)
+	c.pvcautoscaler, err = r.newPVCAutoscaler(seed.GetInfo().Spec.Settings, log)
 	if err != nil {
 		return
 	}
@@ -883,11 +883,12 @@ func (r *Reconciler) newOpenTelemetryOperator() (component.DeployWaiter, error) 
 	)
 }
 
-func (r *Reconciler) newPVCAutoscaler(settings *gardencorev1beta1.SeedSettings) (component.DeployWaiter, error) {
+func (r *Reconciler) newPVCAutoscaler(settings *gardencorev1beta1.SeedSettings, log logr.Logger) (component.DeployWaiter, error) {
 	pvcAutoscaler, err := sharedcomponent.NewPVCAutoscaler(
 		r.SeedClientSet.Client(),
 		r.GardenNamespace,
 		v1beta1constants.PriorityClassNameSeedSystem600,
+		log,
 	)
 	if err != nil {
 		return nil, err

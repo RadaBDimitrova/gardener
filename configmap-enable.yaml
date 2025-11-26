@@ -1,0 +1,180 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    apiVersion: gardenlet.config.gardener.cloud/v1alpha1
+    kind: GardenletConfiguration
+    gardenClientConnection:
+      qps: 100
+      burst: 130
+      bootstrapKubeconfig:
+        name: gardenlet-kubeconfig-bootstrap
+        namespace: garden
+      kubeconfigSecret:
+        name: gardenlet-kubeconfig
+        namespace: garden
+    seedClientConnection:
+      qps: 100
+      burst: 130
+    shootClientConnection:
+      qps: 25
+      burst: 50
+    controllers:
+      backupBucket:
+        concurrentSyncs: 20
+      backupEntry:
+        concurrentSyncs: 20
+      bastion:
+        concurrentSyncs: 20
+      gardenlet:
+        syncPeriod: 1h
+      seed:
+        syncPeriod: 1h
+      shoot:
+        concurrentSyncs: 20
+        respectSyncPeriodOverwrite: true
+        reconcileInMaintenanceOnly: true
+        syncPeriod: 1h
+        retryDuration: 12h
+      shootCare:
+        concurrentSyncs: 5
+        syncPeriod: 30s
+        staleExtensionHealthChecks:
+          enabled: true
+          threshold: 5m
+        managedResourceProgressingThreshold: 1h
+        conditionThresholds:
+        - duration: 1m
+          type: APIServerAvailable
+        - duration: 1m
+          type: ControlPlaneHealthy
+        - duration: 1m
+          type: ObservabilityComponentsHealthy
+        - duration: 1m
+          type: SystemComponentsHealthy
+        - duration: 5m
+          type: EveryNodeReady
+        webhookRemediatorEnabled: false
+      seedCare:
+        syncPeriod: 30s
+        conditionThresholds:
+        - duration: 1m
+          type: SeedSystemComponentsHealthy
+      shootState:
+        concurrentSyncs: 0
+        syncPeriod: 6h
+      shootStatus:
+        concurrentSyncs: 5
+      managedSeed:
+        concurrentSyncs: 5
+        syncPeriod: 1h
+        waitSyncPeriod: 15s
+        syncJitterPeriod: 5m
+      networkPolicy:
+        concurrentSyncs: 5
+      tokenRequestor:
+        concurrentSyncs: 5
+      tokenRequestorWorkloadIdentity:
+        concurrentSyncs: 5
+      vpaEvictionRequirements:
+        concurrentSyncs: 5
+    resources:
+      capacity:
+        shoots: 250
+    leaderElection:
+      leaderElect: true
+      leaseDuration: 15s
+      renewDeadline: 10s
+      retryPeriod: 2s
+      resourceLock: leases
+      resourceName: gardenlet-leader-election
+      resourceNamespace: garden
+    logLevel: info
+    logFormat: json
+    server:
+      healthProbes:
+        port: 2728
+      metrics:
+        port: 2729
+    debugging:
+      enableProfiling: false
+      enableContentionProfiling: false
+    featureGates:
+      DefaultSeccompProfile: true
+      IstioTLSTermination: true
+      NewWorkerPoolHash: true
+      OpenTelemetryCollector: true
+      UseUnifiedHTTPProxyPort: true
+    seedConfig:
+      apiVersion: core.gardener.cloud/v1beta1
+      kind: Seed
+      metadata:
+        labels:
+          base: kind
+        name: local
+      spec:
+        backup:
+          credentialsRef:
+            apiVersion: v1
+            kind: Secret
+            name: backup-local
+            namespace: garden
+          provider: local
+          region: local
+        dns:
+          provider:
+            secretRef:
+              name: internal-domain-internal-local-gardener-cloud
+              namespace: garden
+            type: local
+        extensions:
+        - type: local-ext-seed
+        ingress:
+          controller:
+            kind: nginx
+          domain: ingress.local.seed.local.gardener.cloud
+        networks:
+          nodes: 172.18.0.0/16
+          pods: 10.1.0.0/16
+          services: 10.2.0.0/16
+          shootDefaults:
+            pods: 10.3.0.0/16
+            services: 10.4.0.0/16
+        provider:
+          region: local
+          type: local
+          zones:
+          - "0"
+        settings:
+          excessCapacityReservation:
+            enabled: false
+          scheduling:
+            visible: true
+          verticalPodAutoscaler:
+            enabled: true
+          persistentVolumeClaimAutoscaler:
+            enabled: true
+    logging:
+      enabled: true
+      shootNodeLogging:
+        shootPurposes:
+        - infrastructure
+        - production
+        - development
+        - evaluation
+      vali:
+        enabled: true
+    nodeToleration:
+      defaultNotReadyTolerationSeconds: 60
+      defaultUnreachableTolerationSeconds: 60
+immutable: true
+kind: ConfigMap
+metadata:
+  labels:
+    app: gardener
+    chart: gardenlet-0.1.0
+    heritage: Helm
+    release: gardener-gardenlet
+    resources.gardener.cloud/garbage-collectable-reference: "true"
+    role: gardenlet
+  name: gardenlet-configmap-9cc9855d
+  namespace: garden

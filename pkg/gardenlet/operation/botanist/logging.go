@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 
 	"github.com/gardener/gardener/imagevector"
 	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
@@ -122,6 +123,7 @@ func (b *Botanist) DefaultVali() (vali.Interface, error) {
 		storage     *resource.Quantity
 		maxCapacity *resource.Quantity
 	)
+	storage = ptr.To(resource.MustParse("30Gi"))
 	if b.IsPVCAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings) {
 		parsedStorage, err := resource.ParseQuantity("2Gi")
 		if err != nil {

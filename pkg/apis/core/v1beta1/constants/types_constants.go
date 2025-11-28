@@ -773,6 +773,13 @@ const (
 	// ObservabilityComponentsHealthy is a constant for a condition type indicating the health of observability components.
 	ObservabilityComponentsHealthy = "ObservabilityComponentsHealthy"
 
+	// LabelWithPVCAutoscaler is a constant for a label key that indicates
+	// whether PVC autoscaler is enabled for the resource.
+	LabelWithPVCAutoscaler = "autoscaling.gardener.cloud/with-pvc-autoscaler"
+	// PVCAutoscalerEnabled is a constant for a label that indicates
+	// PVC autoscaler is enabled for the resource.
+	PVCAutoscalerEnabled = "PVCAutoscalerEnabled"
+
 	// LabelWorkerName is a constant for a label that indicates the name of the Worker resource the MachineDeployment belongs to.
 	LabelWorkerName = "worker.gardener.cloud/name"
 	// LabelWorkerPool is a constant for a label that indicates the worker pool the node belongs to

@@ -319,7 +319,7 @@ func (p *prometheus) Deploy(ctx context.Context) error {
 			return err
 		}
 
-		if err := managedresources.CreateForShootWithLabels(ctx, p.client, p.namespace, p.name()+"-target", managedresources.LabelValueGardener, false, map[string]string{v1beta1constants.LabelCareConditionType: v1beta1constants.ObservabilityComponentsHealthy}, resourcesTarget); err != nil {
+		if err := managedresources.CreateForShootWithLabels(ctx, p.client, p.namespace, p.name()+"-target", managedresources.LabelValueGardener, false, map[string]string{v1beta1constants.LabelCareConditionType: v1beta1constants.ObservabilityComponentsHealthy, v1beta1constants.LabelWithPVCAutoscaler: v1beta1constants.PVCAutoscalerEnabled}, resourcesTarget); err != nil {
 			return err
 		}
 	} else {

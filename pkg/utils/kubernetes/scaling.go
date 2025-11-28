@@ -9,7 +9,13 @@ import (
 	"fmt"
 	"time"
 
+	v1beta1constants "github.com/gardener/gardener/pkg/apis/core/v1beta1/constants"
+	resourcesv1alpha1 "github.com/gardener/gardener/pkg/apis/resources/v1alpha1"
+	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,4 +112,71 @@ func ScaleStatefulSetAndWaitUntilScaled(ctx context.Context, c client.Client, ke
 		return err
 	}
 	return WaitUntilStatefulSetScaledToDesiredReplicas(ctx, c, key, replicas)
+}
+
+// ResizeOrDeleteDataVolumeIfStorageNotTheSame updates the Vali/Prometheus PVC if passed storage value is not the same as the
+// current one.
+// Caution: If the passed storage capacity is less than the current one the existing PVC and its PV will be deleted.
+func ResizeOrDeleteDataVolumeIfStorageNotTheSame(ctx context.Context, c client.Client, managedResource *resourcesv1alpha1.ManagedResource, pvcName string, statefulSetName string, storage *resource.Quantity, pvcAutoscalerEnabled bool, log logr.Logger) error {
+	addOrRemoveIgnoreAnnotationFromManagedResource := func(addIgnoreAnnotation bool) error {
+		// In order to not create the managed resource here first check if exists.
+		if err := c.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+			return nil
+		}
+		patch := client.MergeFrom(managedResource.DeepCopy())
+
+		if addIgnoreAnnotation {
+			metav1.SetMetaDataAnnotation(&managedResource.ObjectMeta, resourcesv1alpha1.Ignore, "true")
+		} else {
+			delete(managedResource.Annotations, resourcesv1alpha1.Ignore)
+		}
+		return c.Patch(ctx, managedResource, patch)
+	}
+
+	pvc := &corev1.PersistentVolumeClaim{}
+	if err := c.Get(ctx, client.ObjectKey{Namespace: managedResource.Namespace, Name: pvcName}, pvc); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return err
+		}
+		return addOrRemoveIgnoreAnnotationFromManagedResource(false)
+	}
+
+	// Check if we need resizing
+	storageCmpResult := storage.Cmp(*pvc.Spec.Resources.Requests.Storage())
+	log.Info("current pvc storage", "pvc", pvcName, "namespace", managedResource.Namespace, "currentStorage", pvc.Spec.Resources.Requests.Storage().String(), "desiredStorage", storage.String(), "comparisonResult", storageCmpResult)
+	if storageCmpResult == 0 {
+		return addOrRemoveIgnoreAnnotationFromManagedResource(false)
+	}
+
+	// Annotate managed resource to skip reconciliation.
+	if err := addOrRemoveIgnoreAnnotationFromManagedResource(true); err != nil {
+		return err
+	}
+
+	if err := ScaleStatefulSetAndWaitUntilScaled(ctx, c, client.ObjectKey{Namespace: v1beta1constants.GardenNamespace, Name: statefulSetName}, 0); client.IgnoreNotFound(err) != nil {
+		return err
+	}
+
+	log.Info("resizing pvc", "pvc", pvcName, "namespace", managedResource.Namespace, "storage", storage.String())
+	switch {
+	case storageCmpResult > 0:
+		patch := client.MergeFrom(pvc.DeepCopy())
+		pvc.Spec.Resources.Requests = corev1.ResourceList{corev1.ResourceStorage: *storage}
+		if err := c.Patch(ctx, pvc, patch); client.IgnoreNotFound(err) != nil {
+			return err
+		}
+		log.Info("patching", "pvc", pvc.Name, "namespace", pvc.Namespace, "storage", storage.String())
+	case storageCmpResult < 0:
+		// if pvc-autoscaler is enabled we don't delete the PVC if it is smaller
+		if !pvcAutoscalerEnabled {
+			if err := client.IgnoreNotFound(c.Delete(ctx, pvc)); err != nil {
+				return err
+			}
+		}
+	}
+
+	return addOrRemoveIgnoreAnnotationFromManagedResource(false)
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	pvcautoscalerv1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
@@ -168,7 +169,9 @@ func (v *vali) Deploy(ctx context.Context) error {
 	)
 
 	if v.values.Storage != nil {
-		if err := v.resizeOrDeleteValiDataVolumeIfStorageNotTheSame(ctx); err != nil {
+		log, _ := logr.FromContext(ctx)
+		managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: valiconstants.ManagedResourceNameRuntime, Namespace: v.namespace}}
+		if err := kubernetesutils.ResizeOrDeleteDataVolumeIfStorageNotTheSame(ctx, v.client, managedResource, "vali-vali-0", v1beta1constants.StatefulSetNameVali, v.values.Storage, v.values.PVCAutoscalerEnabled, log); err != nil {
 			return err
 		}
 	}
@@ -233,7 +236,7 @@ func (v *vali) Deploy(ctx context.Context) error {
 			return err
 		}
 
-		if err := managedresources.CreateForShoot(ctx, v.client, v.namespace, managedResourceNameTarget, managedresources.LabelValueGardener, false, resourcesTarget); err != nil {
+		if err := managedresources.CreateForShootWithLabels(ctx, v.client, v.namespace, managedResourceNameTarget, managedresources.LabelValueGardener, false, map[string]string{v1beta1constants.LabelWithPVCAutoscaler: v1beta1constants.PVCAutoscalerEnabled}, resourcesTarget); err != nil {
 			return err
 		}
 	} else {
@@ -1032,70 +1035,4 @@ func getLabels() map[string]string {
 		v1beta1constants.LabelRole:  "logging",
 		v1beta1constants.LabelApp:   valiName,
 	}
-}
-
-// resizeOrDeleteValiDataVolumeIfStorageNotTheSame updates the Vali PVC if passed storage value is not the same as the
-// current one.
-// Caution: If the passed storage capacity is less than the current one the existing PVC and its PV will be deleted.
-func (v *vali) resizeOrDeleteValiDataVolumeIfStorageNotTheSame(ctx context.Context) error {
-	managedResource := &resourcesv1alpha1.ManagedResource{ObjectMeta: metav1.ObjectMeta{Name: valiconstants.ManagedResourceNameRuntime, Namespace: v.namespace}}
-	addOrRemoveIgnoreAnnotationFromManagedResource := func(addIgnoreAnnotation bool) error {
-		// In order to not create the managed resource here first check if exists.
-		if err := v.client.Get(ctx, client.ObjectKeyFromObject(managedResource), managedResource); err != nil {
-			if !apierrors.IsNotFound(err) {
-				return err
-			}
-			return nil
-		}
-		patch := client.MergeFrom(managedResource.DeepCopy())
-
-		if addIgnoreAnnotation {
-			metav1.SetMetaDataAnnotation(&managedResource.ObjectMeta, resourcesv1alpha1.Ignore, "true")
-		} else {
-			delete(managedResource.Annotations, resourcesv1alpha1.Ignore)
-		}
-		return v.client.Patch(ctx, managedResource, patch)
-	}
-
-	pvc := &corev1.PersistentVolumeClaim{}
-	if err := v.client.Get(ctx, client.ObjectKey{Namespace: v.namespace, Name: "vali-vali-0"}, pvc); err != nil {
-		if !apierrors.IsNotFound(err) {
-			return err
-		}
-		return addOrRemoveIgnoreAnnotationFromManagedResource(false)
-	}
-
-	// Check if we need resizing
-	storageCmpResult := v.values.Storage.Cmp(*pvc.Spec.Resources.Requests.Storage())
-	if storageCmpResult == 0 {
-		return addOrRemoveIgnoreAnnotationFromManagedResource(false)
-	}
-
-	// Annotate managed resource to skip reconciliation.
-	if err := addOrRemoveIgnoreAnnotationFromManagedResource(true); err != nil {
-		return err
-	}
-
-	if err := kubernetesutils.ScaleStatefulSetAndWaitUntilScaled(ctx, v.client, client.ObjectKey{Namespace: v1beta1constants.GardenNamespace, Name: v1beta1constants.StatefulSetNameVali}, 0); client.IgnoreNotFound(err) != nil {
-		return err
-	}
-
-	switch {
-	case storageCmpResult > 0:
-		patch := client.MergeFrom(pvc.DeepCopy())
-		pvc.Spec.Resources.Requests = corev1.ResourceList{corev1.ResourceStorage: *v.values.Storage}
-		if err := v.client.Patch(ctx, pvc, patch); client.IgnoreNotFound(err) != nil {
-			return err
-		}
-
-	case storageCmpResult < 0:
-		// if pvc-autoscaler is enabled we don't delete the PVC if it is smaller
-		if !v.values.PVCAutoscalerEnabled {
-			if err := client.IgnoreNotFound(v.client.Delete(ctx, pvc)); err != nil {
-				return err
-			}
-		}
-	}
-
-	return addOrRemoveIgnoreAnnotationFromManagedResource(false)
 }

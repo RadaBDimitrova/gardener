@@ -12,6 +12,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -26,6 +27,7 @@ import (
 	"github.com/gardener/gardener/pkg/resourcemanager/controller/garbagecollector/references"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
+	kubernetesutils "github.com/gardener/gardener/pkg/utils/kubernetes"
 	"github.com/gardener/gardener/pkg/utils/managedresources"
 	"github.com/go-logr/logr"
 )
@@ -111,24 +113,59 @@ func (p *pvcautoscaler) Deploy(ctx context.Context) error {
 func (p *pvcautoscaler) Destroy(ctx context.Context) error {
 	managedResourceList := &resourcesv1alpha1.ManagedResourceList{}
 	if err := p.client.List(ctx, managedResourceList,
-		client.MatchingLabels{"test-delete": "true"}); err != nil {
-		// If we can't list them, just ignore and continue with main deletion
-		_ = err
-	} else if len(managedResourceList.Items) > 0 {
-		// Delete all found ManagedResources
+		client.MatchingLabels{"test-delete": "true"}); err == nil {
 		for _, mr := range managedResourceList.Items {
-			p.log.Info("Deleting test ManagedResource", "name", mr.Name, "namespace", mr.Namespace)
-			if err = p.client.Delete(ctx, &mr); err != nil {
-				return fmt.Errorf("failed to delete test ManagedResource %s/%s: %w", mr.Namespace, mr.Name, err)
+			p.log.Info("Deleting ManagedResource", "name", mr.Name, "namespace", mr.Namespace)
+			if err := p.client.Delete(ctx, &mr); err != nil {
+				return fmt.Errorf("failed to delete ManagedResource %s/%s: %w", mr.Namespace, mr.Name, err)
 			}
 		}
-		p.log.Info("All test ManagedResources deleted")
-		// Wait for them to be deleted properly
-		if err = managedresources.WaitUntilListDeleted(ctx, p.client, managedResourceList, client.MatchingLabels{"test-delete": "true"}); err != nil {
+		p.log.Info("All ManagedResources deleted")
+		if err := managedresources.WaitUntilListDeleted(ctx, p.client, managedResourceList, client.MatchingLabels{"test-delete": "true"}); err != nil {
 			return fmt.Errorf("failed to wait for deletion of ManagedResources: %w", err)
 		}
-		p.log.Info("All test ManagedResources deletion confirmed")
+		p.log.Info("All ManagedResources deletion confirmed")
 	}
+
+	if err := p.client.Get(ctx, client.ObjectKey{Namespace: p.namespace, Name: PVCAutoscalerManagedResourceName}, &resourcesv1alpha1.ManagedResource{}); err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	statefulSetInfo := func(ctx context.Context, namespace string, name string) ([]string, *resource.Quantity, error) {
+		var pvcNames []string
+		statefulSet := &appsv1.StatefulSet{}
+		if err := p.client.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, statefulSet); err != nil {
+			return nil, nil, err
+		}
+
+		for _, pvc := range statefulSet.Spec.VolumeClaimTemplates {
+			pvcNames = append(pvcNames, pvc.Name)
+		}
+
+		defaultStorage := statefulSet.Spec.VolumeClaimTemplates[0].Spec.Resources.Requests.Storage()
+		return pvcNames, defaultStorage, nil
+	}
+
+	observabilityManagedResourceList := &resourcesv1alpha1.ManagedResourceList{}
+	if err := p.client.List(ctx, observabilityManagedResourceList,
+		client.MatchingLabels{v1beta1constants.LabelWithPVCAutoscaler: v1beta1constants.PVCAutoscalerEnabled}); err != nil {
+		return fmt.Errorf("failed to list ManagedResources: %w", err)
+	}
+	p.log.Info("Resizing data volumes if storage is less than default")
+	for _, mr := range observabilityManagedResourceList.Items {
+		shootPVCNames, defaultStorage, err := statefulSetInfo(ctx, mr.Namespace, mr.Name)
+		if err != nil {
+			return err
+		}
+		for _, pvcName := range shootPVCNames {
+			p.log.Info("Resizing shoot data volume if storage is less than default", "namespace", mr.Namespace)
+			kubernetesutils.ResizeOrDeleteDataVolumeIfStorageNotTheSame(ctx, p.client, &mr, pvcName, mr.Name, defaultStorage, true, p.log)
+		}
+	}
+
 	return managedresources.DeleteForSeed(ctx, p.client, p.namespace, PVCAutoscalerManagedResourceName)
 }
 

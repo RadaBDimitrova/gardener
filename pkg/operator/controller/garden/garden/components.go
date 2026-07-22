@@ -346,7 +346,7 @@ func (r *Reconciler) instantiateComponents(
 	if err != nil {
 		return
 	}
-	c.vali, err = r.newVali(c.istio.GetValues().IngressGateway)
+	c.vali, err = r.newVali(garden, c.istio.GetValues().IngressGateway)
 	if err != nil {
 		return
 	}
@@ -390,7 +390,7 @@ func (r *Reconciler) instantiateComponents(
 	if err != nil {
 		return
 	}
-	c.victoriaLogs, err = r.newVictoriaLogs()
+	c.victoriaLogs, err = r.newVictoriaLogs(garden)
 	if err != nil {
 		return
 	}
@@ -1453,7 +1453,7 @@ func (r *Reconciler) newFluentCustomResources() (component.DeployWaiter, error) 
 	)
 }
 
-func (r *Reconciler) newVali(ingressGatewayValues []istio.IngressGatewayValues) (component.Deployer, error) {
+func (r *Reconciler) newVali(garden *operatorv1alpha1.Garden, ingressGatewayValues []istio.IngressGatewayValues) (component.Deployer, error) {
 	if len(ingressGatewayValues) != 1 {
 		return nil, fmt.Errorf("exactly one Istio Ingress Gateway is required for the vali config")
 	}
@@ -1471,7 +1471,11 @@ func (r *Reconciler) newVali(ingressGatewayValues []istio.IngressGatewayValues) 
 		true,
 		ingressGatewayValues[0].Labels,
 		ingressGatewayValues[0].Namespace,
-		vali.PVCAutoscalingConfig{},
+		vali.PVCAutoscalingConfig{
+			Enabled:        pvcAutoscalerEnabled(garden.Spec.RuntimeCluster.Settings),
+			MaxCapacity:    resource.MustParse("200Gi"),
+			AutoscalerName: "garden",
+		},
 	)
 	if err != nil {
 		return nil, err
@@ -1486,7 +1490,7 @@ func (r *Reconciler) newVali(ingressGatewayValues []istio.IngressGatewayValues) 
 	return deployer, nil
 }
 
-func (r *Reconciler) newVictoriaLogs() (component.DeployWaiter, error) {
+func (r *Reconciler) newVictoriaLogs(garden *operatorv1alpha1.Garden) (component.DeployWaiter, error) {
 	deployer, err := sharedcomponent.NewVictoriaLogs(
 		r.RuntimeClientSet.Client(),
 		r.GardenNamespace,
@@ -1495,7 +1499,11 @@ func (r *Reconciler) newVictoriaLogs() (component.DeployWaiter, error) {
 		v1beta1constants.PriorityClassNameGardenSystem100,
 		nil,
 		true,
-		victorialogs.PVCAutoscalingConfig{},
+		victorialogs.PVCAutoscalingConfig{
+			Enabled:        pvcAutoscalerEnabled(garden.Spec.RuntimeCluster.Settings),
+			MaxCapacity:    resource.MustParse("200Gi"),
+			AutoscalerName: "garden",
+		},
 	)
 	if err != nil {
 		return nil, err

@@ -91,6 +91,7 @@ func (p *pvcAutoscaler) Deploy(ctx context.Context) error {
 		pdb                = p.podDisruptionBudget()
 		vpa                = p.verticalPodAutoscaler()
 		serviceMonitor     = p.serviceMonitor()
+		prometheusRule     = p.prometheusRule()
 	)
 
 	metricsNetworkPolicyPort := networkingv1.NetworkPolicyPort{
@@ -114,6 +115,7 @@ func (p *pvcAutoscaler) Deploy(ctx context.Context) error {
 		pdb,
 		vpa,
 		serviceMonitor,
+		prometheusRule,
 	)
 	if err != nil {
 		return err
@@ -476,7 +478,75 @@ func (p *pvcAutoscaler) serviceMonitor() *monitoringv1.ServiceMonitor {
 						Regex:  `__meta_kubernetes_pod_label_(.+)`,
 					},
 				},
+				MetricRelabelConfigs: monitoringutils.StandardMetricRelabelConfig(
+					"pvc_autoscaler_resized_total",
+					"pvc_autoscaler_threshold_reached_total",
+					"pvc_autoscaler_max_capacity_reached_total",
+					"pvc_autoscaler_skipped_total",
+					"controller_runtime_reconcile_errors_total",
+				),
 			}},
 		},
 	}
+}
+
+func (p *pvcAutoscaler) emptyPrometheusRule() *monitoringv1.PrometheusRule {
+	return &monitoringv1.PrometheusRule{ObjectMeta: monitoringutils.ConfigObjectMeta(p.values.ManagedResourceName, p.namespace, p.values.ServiceMonitorLabel)}
+}
+
+func (p *pvcAutoscaler) prometheusRule() *monitoringv1.PrometheusRule {
+	job := p.values.ManagedResourceName
+
+	rule := p.emptyPrometheusRule()
+	metav1.SetMetaDataLabel(&rule.ObjectMeta, "prometheus", p.values.ServiceMonitorLabel)
+	rule.Spec = monitoringv1.PrometheusRuleSpec{
+		Groups: []monitoringv1.RuleGroup{{
+			Name: "pvc-autoscaler.rules",
+			Rules: []monitoringv1.Rule{
+				{
+					Alert: "PVCAutoscalerDown",
+					Expr:  intstr.FromString(`absent(up{job="` + job + `"} == 1)`),
+					For:   new(monitoringv1.Duration("15m")),
+					Labels: map[string]string{
+						"service":  p.values.ManagedResourceName,
+						"severity": "critical",
+						"type":     p.values.ServiceMonitorLabel,
+					},
+					Annotations: map[string]string{
+						"summary":     "PVC autoscaler is down",
+						"description": "There is no running PVC autoscaler. PersistentVolumeClaims won't be resized automatically when they run low on capacity.",
+					},
+				},
+				{
+					Alert: "PVCAutoscalerMaxCapacityReached",
+					Expr:  intstr.FromString(`increase(pvc_autoscaler_max_capacity_reached_total[1h]) > 0`),
+					For:   new(monitoringv1.Duration("5m")),
+					Labels: map[string]string{
+						"service":  p.values.ManagedResourceName,
+						"severity": "warning",
+						"type":     p.values.ServiceMonitorLabel,
+					},
+					Annotations: map[string]string{
+						"summary":     "PVC reached its maximum capacity",
+						"description": "PersistentVolumeClaim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has reached its configured maximum capacity and can no longer be resized automatically. Manual intervention is required.",
+					},
+				},
+				{
+					Alert: "PVCAutoscalerReconcileErrors",
+					Expr:  intstr.FromString(`increase(controller_runtime_reconcile_errors_total{job="` + job + `"}[30m]) > 0`),
+					For:   new(monitoringv1.Duration("30m")),
+					Labels: map[string]string{
+						"service":  p.values.ManagedResourceName,
+						"severity": "warning",
+						"type":     p.values.ServiceMonitorLabel,
+					},
+					Annotations: map[string]string{
+						"summary":     "PVC autoscaler reconciliations are failing",
+						"description": "The PVC autoscaler has been failing to reconcile PersistentVolumeClaims for more than 30 minutes. Resizes may be stuck or not applied.",
+					},
+				},
+			},
+		}},
+	}
+	return rule
 }

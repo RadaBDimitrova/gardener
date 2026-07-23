@@ -32,6 +32,7 @@ import (
 	. "github.com/gardener/gardener/pkg/component/autoscaling/pvcautoscaler"
 	"github.com/gardener/gardener/pkg/component/observability/monitoring/prometheus/seed"
 	monitoringutils "github.com/gardener/gardener/pkg/component/observability/monitoring/utils"
+	componenttest "github.com/gardener/gardener/pkg/component/test"
 	"github.com/gardener/gardener/pkg/resourcemanager/controller/garbagecollector/references"
 	"github.com/gardener/gardener/pkg/utils"
 	gardenerutils "github.com/gardener/gardener/pkg/utils/gardener"
@@ -67,6 +68,7 @@ var _ = Describe("PVCAutoscaler", func() {
 		pdb                *policyv1.PodDisruptionBudget
 		vpa                *vpaautoscalingv1.VerticalPodAutoscaler
 		serviceMonitor     *monitoringv1.ServiceMonitor
+		prometheusRule     *monitoringv1.PrometheusRule
 	)
 
 	getLabels := func() map[string]string {
@@ -390,9 +392,70 @@ var _ = Describe("PVCAutoscaler", func() {
 							Regex:  `__meta_kubernetes_pod_label_(.+)`,
 						},
 					},
+					MetricRelabelConfigs: monitoringutils.StandardMetricRelabelConfig(
+						"pvc_autoscaler_resized_total",
+						"pvc_autoscaler_threshold_reached_total",
+						"pvc_autoscaler_max_capacity_reached_total",
+						"pvc_autoscaler_skipped_total",
+						"controller_runtime_reconcile_errors_total",
+					),
 				}},
 			},
 		}
+
+		prometheusRule = &monitoringv1.PrometheusRule{
+			ObjectMeta: monitoringutils.ConfigObjectMeta(name, namespace, seed.Label),
+			Spec: monitoringv1.PrometheusRuleSpec{
+				Groups: []monitoringv1.RuleGroup{{
+					Name: "pvc-autoscaler.rules",
+					Rules: []monitoringv1.Rule{
+						{
+							Alert: "PVCAutoscalerDown",
+							Expr:  intstr.FromString(`absent(up{job="` + name + `"} == 1)`),
+							For:   new(monitoringv1.Duration("15m")),
+							Labels: map[string]string{
+								"service":  name,
+								"severity": "critical",
+								"type":     seed.Label,
+							},
+							Annotations: map[string]string{
+								"summary":     "PVC autoscaler is down",
+								"description": "There is no running PVC autoscaler. PersistentVolumeClaims won't be resized automatically when they run low on capacity.",
+							},
+						},
+						{
+							Alert: "PVCAutoscalerMaxCapacityReached",
+							Expr:  intstr.FromString(`increase(pvc_autoscaler_max_capacity_reached_total[1h]) > 0`),
+							For:   new(monitoringv1.Duration("5m")),
+							Labels: map[string]string{
+								"service":  name,
+								"severity": "warning",
+								"type":     seed.Label,
+							},
+							Annotations: map[string]string{
+								"summary":     "PVC reached its maximum capacity",
+								"description": "PersistentVolumeClaim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has reached its configured maximum capacity and can no longer be resized automatically. Manual intervention is required.",
+							},
+						},
+						{
+							Alert: "PVCAutoscalerReconcileErrors",
+							Expr:  intstr.FromString(`increase(controller_runtime_reconcile_errors_total{job="` + name + `"}[30m]) > 0`),
+							For:   new(monitoringv1.Duration("30m")),
+							Labels: map[string]string{
+								"service":  name,
+								"severity": "warning",
+								"type":     seed.Label,
+							},
+							Annotations: map[string]string{
+								"summary":     "PVC autoscaler reconciliations are failing",
+								"description": "The PVC autoscaler has been failing to reconcile PersistentVolumeClaims for more than 30 minutes. Resizes may be stuck or not applied.",
+							},
+						},
+					},
+				}},
+			},
+		}
+		metav1.SetMetaDataLabel(&prometheusRule.ObjectMeta, "prometheus", seed.Label)
 	})
 
 	JustBeforeEach(func() {
@@ -446,14 +509,98 @@ var _ = Describe("PVCAutoscaler", func() {
 				pdb,
 				vpa,
 				serviceMonitor,
+				prometheusRule,
 			}
 			Expect(managedResource).To(consistOf(expectedObjects...))
+
+			componenttest.PrometheusRule(prometheusRule, "testdata/seed-pvc-autoscaler.prometheusrule.test.yaml")
 
 			managedResourceSecret.Name = managedResource.Spec.SecretRefs[0].Name
 			Expect(c.Get(ctx, client.ObjectKeyFromObject(managedResourceSecret), managedResourceSecret)).To(Succeed())
 			Expect(managedResourceSecret.Type).To(Equal(corev1.SecretTypeOpaque))
 			Expect(managedResourceSecret.Immutable).To(Equal(new(true)))
 			Expect(managedResourceSecret.Labels["resources.gardener.cloud/garbage-collectable-reference"]).To(Equal("true"))
+		})
+
+		It("should deploy the expected prometheus rule for the garden cluster", func() {
+			gardenName := PVCAutoscalerGardenManagedResourceName
+
+			comp = NewPVCAutoscaler(c, namespace, Values{
+				Image:                 image,
+				PriorityClassName:     priorityClassName,
+				ManagedResourceName:   gardenName,
+				PrometheusServiceName: "prometheus-garden",
+				ServiceMonitorLabel:   "garden",
+				IsGardenCluster:       true,
+			})
+
+			gardenPrometheusRule := &monitoringv1.PrometheusRule{
+				ObjectMeta: monitoringutils.ConfigObjectMeta(gardenName, namespace, "garden"),
+				Spec: monitoringv1.PrometheusRuleSpec{
+					Groups: []monitoringv1.RuleGroup{{
+						Name: "pvc-autoscaler.rules",
+						Rules: []monitoringv1.Rule{
+							{
+								Alert: "PVCAutoscalerDown",
+								Expr:  intstr.FromString(`absent(up{job="` + gardenName + `"} == 1)`),
+								For:   new(monitoringv1.Duration("15m")),
+								Labels: map[string]string{
+									"service":  gardenName,
+									"severity": "critical",
+									"type":     "garden",
+								},
+								Annotations: map[string]string{
+									"summary":     "PVC autoscaler is down",
+									"description": "There is no running PVC autoscaler. PersistentVolumeClaims won't be resized automatically when they run low on capacity.",
+								},
+							},
+							{
+								Alert: "PVCAutoscalerMaxCapacityReached",
+								Expr:  intstr.FromString(`increase(pvc_autoscaler_max_capacity_reached_total[1h]) > 0`),
+								For:   new(monitoringv1.Duration("5m")),
+								Labels: map[string]string{
+									"service":  gardenName,
+									"severity": "warning",
+									"type":     "garden",
+								},
+								Annotations: map[string]string{
+									"summary":     "PVC reached its maximum capacity",
+									"description": "PersistentVolumeClaim {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} has reached its configured maximum capacity and can no longer be resized automatically. Manual intervention is required.",
+								},
+							},
+							{
+								Alert: "PVCAutoscalerReconcileErrors",
+								Expr:  intstr.FromString(`increase(controller_runtime_reconcile_errors_total{job="` + gardenName + `"}[30m]) > 0`),
+								For:   new(monitoringv1.Duration("30m")),
+								Labels: map[string]string{
+									"service":  gardenName,
+									"severity": "warning",
+									"type":     "garden",
+								},
+								Annotations: map[string]string{
+									"summary":     "PVC autoscaler reconciliations are failing",
+									"description": "The PVC autoscaler has been failing to reconcile PersistentVolumeClaims for more than 30 minutes. Resizes may be stuck or not applied.",
+								},
+							},
+						},
+					}},
+				},
+			}
+			metav1.SetMetaDataLabel(&gardenPrometheusRule.ObjectMeta, "prometheus", "garden")
+
+			gardenManagedResource := &resourcesv1alpha1.ManagedResource{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      gardenName,
+					Namespace: namespace,
+				},
+			}
+			Expect(c.Get(ctx, client.ObjectKeyFromObject(gardenManagedResource), gardenManagedResource)).To(BeNotFoundError())
+
+			Expect(comp.Deploy(ctx)).To(Succeed())
+
+			Expect(c.Get(ctx, client.ObjectKeyFromObject(gardenManagedResource), gardenManagedResource)).To(Succeed())
+
+			componenttest.PrometheusRule(gardenPrometheusRule, "testdata/garden-pvc-autoscaler-garden.prometheusrule.test.yaml")
 		})
 	})
 

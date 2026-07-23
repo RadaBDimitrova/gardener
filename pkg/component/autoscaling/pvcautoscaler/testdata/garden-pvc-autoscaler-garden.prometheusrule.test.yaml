@@ -1,0 +1,59 @@
+rule_files:
+- garden-pvc-autoscaler-garden.prometheusrule.yaml
+
+evaluation_interval: 30s
+
+tests:
+# PVCAutoscalerDown
+- interval: 30s
+  input_series:
+  - series: 'up{job="pvc-autoscaler-garden"}'
+    values: '0+0x120'
+  alert_rule_test:
+  - eval_time: 15m
+    alertname: PVCAutoscalerDown
+    exp_alerts:
+    - exp_labels:
+        service: pvc-autoscaler-garden
+        severity: critical
+        type: garden
+      exp_annotations:
+        summary: PVC autoscaler is down
+        description: There is no running PVC autoscaler. PersistentVolumeClaims won't be resized automatically when they run low on capacity.
+
+# PVCAutoscalerMaxCapacityReached
+- interval: 30s
+  input_series:
+  - series: 'pvc_autoscaler_max_capacity_reached_total{namespace="ns1", persistentvolumeclaim="pvc1"}'
+    values: '0+1x120'
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: PVCAutoscalerMaxCapacityReached
+    exp_alerts:
+    - exp_labels:
+        namespace: ns1
+        persistentvolumeclaim: pvc1
+        service: pvc-autoscaler-garden
+        severity: warning
+        type: garden
+      exp_annotations:
+        summary: PVC reached its maximum capacity
+        description: PersistentVolumeClaim ns1/pvc1 has reached its configured maximum capacity and can no longer be resized automatically. Manual intervention is required.
+
+# PVCAutoscalerReconcileErrors
+- interval: 30s
+  input_series:
+  - series: 'controller_runtime_reconcile_errors_total{job="pvc-autoscaler-garden"}'
+    values: '0+1x120'
+  alert_rule_test:
+  - eval_time: 1h
+    alertname: PVCAutoscalerReconcileErrors
+    exp_alerts:
+    - exp_labels:
+        job: pvc-autoscaler-garden
+        service: pvc-autoscaler-garden
+        severity: warning
+        type: garden
+      exp_annotations:
+        summary: PVC autoscaler reconciliations are failing
+        description: The PVC autoscaler has been failing to reconcile PersistentVolumeClaims for more than 30 minutes. Resizes may be stuck or not applied.

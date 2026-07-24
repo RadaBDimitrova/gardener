@@ -787,7 +787,7 @@ status: {}
 				})
 
 				It("should successfully deploy all resources", func() {
-					checkDeployedResources("plutono-dashboards", 24)
+					checkDeployedResources("plutono-dashboards", 25)
 				})
 
 				Context("w/ Vali is removed", func() {
@@ -820,7 +820,7 @@ status: {}
 					})
 
 					It("should successfully deploy all resources", func() {
-						checkDeployedResources("plutono-dashboards", 28)
+						checkDeployedResources("plutono-dashboards", 29)
 					})
 				})
 			})
@@ -837,7 +837,7 @@ status: {}
 					})
 
 					It("should successfully deploy all resources", func() {
-						checkDeployedResources("plutono-dashboards-garden", 32)
+						checkDeployedResources("plutono-dashboards-garden", 33)
 					})
 				})
 
@@ -848,7 +848,7 @@ status: {}
 
 					It("should successfully deploy all resources", func() {
 						dashboardConfigMapName := "plutono-dashboards-garden"
-						dashboardCount := 28
+						dashboardCount := 29
 
 						Expect(manifests).To(ConsistOf(
 							dataSourceConfigMapYAMLFor(values),
@@ -867,7 +867,7 @@ status: {}
 				})
 
 				It("should successfully deploy all resources", func() {
-					checkDeployedResources("plutono-dashboards-garden", 28)
+					checkDeployedResources("plutono-dashboards-garden", 29)
 				})
 			})
 		})

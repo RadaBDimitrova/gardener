@@ -631,6 +631,11 @@ func (r *Reconciler) newVictoriaLogs(seedSettings *gardencorev1beta1.SeedSetting
 		storage = r.Config.Logging.VictoriaLogs.Garden.Storage
 	}
 
+	pvcAutoscalerEnabled := v1beta1helper.SeedSettingPersistentVolumeClaimAutoscalerEnabled(seedSettings)
+	if pvcAutoscalerEnabled {
+		storage = new(resource.MustParse("5Gi"))
+	}
+
 	deployer, err := sharedcomponent.NewVictoriaLogs(
 		r.SeedClientSet.Client(),
 		r.GardenNamespace,
@@ -640,7 +645,7 @@ func (r *Reconciler) newVictoriaLogs(seedSettings *gardencorev1beta1.SeedSetting
 		storage,
 		false,
 		victorialogs.PVCAutoscalingConfig{
-			Enabled:     v1beta1helper.SeedSettingPersistentVolumeClaimAutoscalerEnabled(seedSettings),
+			Enabled:     pvcAutoscalerEnabled,
 			MaxCapacity: resource.MustParse("200Gi"),
 		},
 	)

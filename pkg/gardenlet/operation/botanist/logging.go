@@ -240,6 +240,13 @@ func (b *Botanist) DefaultOtelCollector() (collector.Interface, error) {
 
 // DefaultVictoriaLogs returns a deployer for VictoriaLogs.
 func (b *Botanist) DefaultVictoriaLogs() (component.DeployWaiter, error) {
+	var initialStorage *resource.Quantity
+
+	pvcAutoscalerEnabled := v1beta1helper.SeedSettingPersistentVolumeClaimAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings)
+	if pvcAutoscalerEnabled && features.DefaultFeatureGate.Enabled(features.VictoriaLogsBackend) {
+		initialStorage = new(resource.MustParse("5Gi"))
+	}
+
 	deployer, err := shared.NewVictoriaLogs(
 		b.SeedClientSet.Client(),
 		b.Shoot.ControlPlaneNamespace,
@@ -249,8 +256,9 @@ func (b *Botanist) DefaultVictoriaLogs() (component.DeployWaiter, error) {
 		nil,
 		false,
 		victorialogs.PVCAutoscalingConfig{
-			Enabled:     v1beta1helper.SeedSettingPersistentVolumeClaimAutoscalerEnabled(b.Seed.GetInfo().Spec.Settings),
-			MaxCapacity: resource.MustParse("40Gi"),
+			Enabled:        pvcAutoscalerEnabled,
+			MaxCapacity:    resource.MustParse("40Gi"),
+			InitialStorage: initialStorage,
 		},
 	)
 	if err != nil {

@@ -18,6 +18,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -68,6 +69,9 @@ type PVCAutoscalingConfig struct {
 	Enabled bool
 	// MaxCapacity is the upper bound up to which the PVC may be scaled.
 	MaxCapacity resource.Quantity
+	// InitialStorage is the smaller PVC size a freshly created instance starts with when autoscaling is enabled.
+	// It is only applied on first deploy; existing instances keep their Storage so their PVCs are never shrunk.
+	InitialStorage *resource.Quantity
 }
 
 type victoriaLogs struct {
@@ -90,6 +94,15 @@ func New(
 }
 
 func (v *victoriaLogs) Deploy(ctx context.Context) error {
+	if v.values.PVCAutoscaling.Enabled && v.values.PVCAutoscaling.InitialStorage != nil {
+		if err := v.client.Get(ctx, client.ObjectKey{Namespace: v.namespace, Name: constants.ManagedResourceNameRuntime}, &resourcesv1alpha1.ManagedResource{}); err != nil {
+			if !apierrors.IsNotFound(err) {
+				return err
+			}
+			v.values.Storage = v.values.PVCAutoscaling.InitialStorage
+		}
+	}
+
 	// TODO(rrhubenov): Remove this check once https://github.com/VictoriaMetrics/operator/pull/2401 is merged
 	// and we update to the release that includes it. Until then, the VictoriaMetrics operator cannot handle a
 	// digest-only image reference, so we reject it here. A digest-only tag has the form "<algorithm>:<hex>"
